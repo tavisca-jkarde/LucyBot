@@ -1,12 +1,15 @@
 ﻿using Lucy.Core.Contracts;
+using Matrix;
 using Matrix.Xmpp;
 using Matrix.Xmpp.Client;
 using Matrix.Xmpp.Register;
+using Matrix.Xmpp.XData;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Lucy.Core
@@ -14,7 +17,10 @@ namespace Lucy.Core
     public class ChatBot : ICanChat
     {
         private ICommandAdapter _commandAdapter;
-        XmppClient xmppClient = new XmppClient();
+        private Matrix.Xmpp.Client.XmppClient _xmppClient;
+        private Matrix.Xmpp.Client.PresenceManager _presenceManager;
+        private bool _loggedIn;
+
         ChatRoom room;
         public ChatBot(ICommandAdapter commandAdapter)
         {
@@ -24,82 +30,115 @@ namespace Lucy.Core
 
         public ChatBot() {
 
-          //  xmppClient.OnRegister += new EventHandler<Matrix.EventArgs>(xmppClient_OnRegister);
-            //xmppClient.OnRegisterInformation += new EventHandler<Matrix.Xmpp.Register.RegisterEventArgs>(xmppClient_OnRegisterInformation);
-            //xmppClient.OnRegisterError += new EventHandler<Matrix.Xmpp.Client.IqEventArgs>(xmppClient_OnRegisterError);
-            xmppClient.OnMessage += new EventHandler<MessageEventArgs>(xmppClient_OnMessage);
-
-            xmppClient.SetXmppDomain( "chat.hipchat.com");
-            xmppClient.SetUsername("jkarde@tavisca.com");
-            xmppClient.Password = "kaddy2014";
-            xmppClient.Status = "Nigger";
-            xmppClient.Show = Matrix.Xmpp.Show.chat; 
+            _xmppClient = new Matrix.Xmpp.Client.XmppClient();
+            _loggedIn = false;
             room = new ChatRoom();
+            Start();
+
+        }
+        public void Start(){
             
-            var msg = new Matrix.Xmpp.Client.Message
+            string botUserName = "114716_1167039";
+            string domain = "chat.hipchat.com";
+
+            _xmppClient.SetUsername(botUserName);
+            _xmppClient.SetXmppDomain(domain);
+            _xmppClient.Password = "bottheeva";
+            
+            _xmppClient.OnLogin += new EventHandler<Matrix.EventArgs>(_xmppClient_OnLogin);
+            _xmppClient.OnMessage += new EventHandler<Matrix.Xmpp.Client.MessageEventArgs>(_xmppClient_OnMessage);
+            _xmppClient.OnPresence += new EventHandler<Matrix.Xmpp.Client.PresenceEventArgs>(_xmppClient_OnPresence);
+            _xmppClient.AutoRoster = true;
+            
+            try
+            {                
+                _xmppClient.Open();
+
+                Thread.Sleep(100000);
+            }
+            catch
             {
-                Type = MessageType.chat,
-                To = "prathod@tavisca.com",
-                Body = "Hello World!"
-            };
-           xmppClient.Send(msg);
-           xmppClient.OnLogin += new EventHandler<Matrix.EventArgs>(xmpp_OnLogin);
-           xmppClient.OnAuthError += new EventHandler<Matrix.Xmpp.Sasl.SaslEventArgs>(XmppClient_OnAuthError);
-           xmppClient.OnError += new EventHandler<Matrix.ExceptionEventArgs>(XmppClient_OnError);
-           xmppClient.OnRosterEnd += new EventHandler<Matrix.EventArgs>(XmppClient_OnRosterEnd);
-           xmppClient.Open();
+                Console.WriteLine("Login Failed");
+            }
 
-           xmppClient.SendPresence(Show.chat, "Online");
-           xmppClient.OnPresence += new EventHandler<PresenceEventArgs>(XmppClient_OnPresence);
+            if (_loggedIn)
+            {
+                
+                _presenceManager = new PresenceManager(_xmppClient);
+                Jid sub_jid = "114716_1163345@chat.hipchat.com";
+
+                _presenceManager.Subscribe(sub_jid);
+                do
+                {
+
+                } while (true);
+
+               
+            }
+            _xmppClient.Close();
         }
 
-        private void XmppClient_OnPresence(object sender, PresenceEventArgs pres)
+        private void _xmppClient_OnRegisterError(object sender, IqEventArgs e)
         {
-            if (!pres.Presence.Type.Equals("unavailable"))
-                Console.WriteLine("{0}@{1}  {2}", pres.Presence.From.User,
-                    pres.Presence.From.Server, pres.Presence.Type);
+            _xmppClient.Close();
         }
 
-        private void XmppClient_OnRosterEnd(object sender, Matrix.EventArgs e)
+              
+        private void _xmppClient_OnLogin(object sender, Matrix.EventArgs e)
         {
-            throw new NotImplementedException();
+            int i = 0;
+            while (i < 10)
+            {
+                Console.Write(".");
+                i++;
+                Thread.Sleep(500);
+            }
+            _loggedIn = true;
+            Console.WriteLine("Successfully logged in!!");
+        
+
         }
 
-        private void XmppClient_OnError(object sender, Matrix.ExceptionEventArgs e)
+       void _xmppClient_OnMessage(object sender, MessageEventArgs e)
         {
-            throw new NotImplementedException();
-        }
+            string user = e.Message.From.User;
+            string message = e.Message.Body;
+            if (message != null)
+                if (IsAddressedToBot(message))
+                {
+                    message = message.Replace("@lucy", "");
+                    message = message.TrimStart().TrimEnd();
+                    _xmppClient.Send(new Matrix.Xmpp.Client.Message(user + "@conf.hipchat.com", MessageType.groupchat, message));
+                    Console.WriteLine(message);
+                }
+          }
 
-        private void XmppClient_OnAuthError(object sender, Matrix.Xmpp.Sasl.SaslEventArgs e)
+        private string ParseMessage(string message)
         {
-            throw new NotImplementedException();
+            var tempMessage = message.Replace("@lucy", " ");
+            tempMessage = message.TrimStart().TrimEnd();
+            Console.WriteLine(tempMessage);
+            return tempMessage;
         }
 
-        private void xmppClient_OnMessage(object sender, MessageEventArgs e)
+        private bool IsAddressedToBot(string message)
         {
-            Debug.WriteLine("hell0 in onmessage");
-            throw new NotImplementedException();
+            if (message.StartsWith("@lucy"))
+                return true;
+            return false;
         }
 
-        private void xmppClient_OnRegisterError(object sender, IqEventArgs e)
+        private void _xmppClient_OnPresence(object sender, PresenceEventArgs e)
         {
-            // registration failed.
-            throw new NotImplementedException();
+            Console.WriteLine("{0}@{1} -> {2}", e.Presence.From.User, e.Presence.From.Server, e.Presence.Type);
+            Console.WriteLine();
         }
 
-        private void xmppClient_OnRegisterInformation(object sender, RegisterEventArgs registerEventArgs)
+        private void _presenceManager_OnSubscribe(object sender, PresenceEventArgs e)
         {
-            throw new NotImplementedException();
+            
         }
-
-        private void xmppClient_OnRegister(object sender, EventArgs registerEventArgs) {
-            throw new NotImplementedException();
-        }
-
-        private void xmpp_OnLogin(object sender, Matrix.EventArgs e)
-        {
-            Debug.WriteLine("in onlogin ");
-        }
+            
         public void Notify(string newMessage)
         {
             throw new NotImplementedException();
